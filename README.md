@@ -491,3 +491,270 @@ Options define test-run behavior. Most options can be passed in multiple places
 | User agent                                 | A string specifying the User-Agent header when sending HTTP requests                |
 | Verbose                                       | A boolean specifying whether verbose logging is enabled                             |
 | VUs                                               | A number specifying the number of VUs to run concurrently                           |
+
+## Test life cycle
+
+```javascript
+// 1. init code
+
+export function setup() {
+  // 2. setup code
+}
+
+export default function (data) {
+  // 3. VU code
+}
+
+export function teardown(data) {
+  // 4. teardown code
+}
+```
+
+| Test stage      | Used to                                                    | Example                                                                                 | Called                                                                             | Required? |
+|-----------------|------------------------------------------------------------|-----------------------------------------------------------------------------------------|------------------------------------------------------------------------------------|-----------|
+| **1. init**     | Load local files, import modules, declare global variables | Open JSON file, Import module                                                           | Once per VU\*                                                                      | Required  |
+| **2. Setup**    | Set up data for processing, share data among VUs           | Call API to start test environment                                                      | Once                                                                               | Optional  |
+| **3. VU code**  | Run the test function, usually `default` | Make https requests, validate responses                                                 | Once per iteration, as many times as the test options require | Required       |
+| **4. Teardown** | Process result of setup code, stop test environment        | Validate that setup had a certain result, send webhook notifying that test has finished | Once per script                                                                    | Optional        |
+
+## Modules
+
+> *utils*
+
+```javascript
+import { randomItem } from 'https://jslib.k6.io/k6-utils/1.2.0/index.js';
+
+export default function () {
+  randomItem();
+}
+```
+
+The utils module contains number of small utility functions useful in every day load testing.  
+
+| Function | Description |
+| -------- | ----------- |
+| randomIntBetween(min, max)  | Random integer in a given range |
+| randomItem(array)  | Random item from a given array |
+| randomString(length, charset)  | Random string of a given length, optionally selected from a custom character set |
+| uuidv4()  | Random UUID v4 in a string representation |
+| findBetween(content, left, right, repeat)  | Extract a string between two surrounding strings |
+| normalDistributionStages(maxVUs, durationSeconds, numberOfStages) of VUs for a test  |
+| getCurrentStageIndex | Get the index of the running stage as defined in the `stages` array options. It can be used only with the executors that support the `stages` option as ramping-vus. |
+| tagWithCurrentStageIndex | Tag all the generated metrics in the iteration with the index of the current running stage. |
+| tagWithCurrentStageProfile | Tag all the generated metrics in the iteration with the computed profile for the current running stage. |
+
+```javascript
+import { sleep } from 'k6';
+import http from 'k6/http';
+
+import {
+  randomIntBetween,
+  randomString,
+  randomItem,
+  uuidv4,
+  findBetween,
+} from 'https://jslib.k6.io/k6-utils/1.2.0/index.js';
+
+export default function () {
+  const res = http.post(`https://test-api.k6.io/user/register/`, {
+    first_name: randomItem(['Joe', 'Jane']), // random name
+    last_name: `Jon${randomString(1, 'aeiou')}s`, //random character from given list
+    username: `user_${randomString(10)}@example.com`, // random email address,
+    password: uuidv4(), // random password in form of uuid
+  });
+
+  // find a string between two strings to grab the username:
+  const username = findBetween(res.body, '"username":"', '"');
+  console.log('username from response: ' + username);
+
+  sleep(randomIntBetween(1, 5)); // sleep between 1 and 5 seconds.
+}
+```
+
+> *httpx*
+
+The httpx module is an external JavaScript library that wraps around the native k6/http module. It's a http client with features that are not yet available in the native module.  
+
+ - bility to set http options globally (such as timeout)
+ - ability to set default tags and headers that will be used for all requests
+ - more user-friendly arguments to request functions (get, post, put take the same arguments)
+
+| Function | Description |
+| -------- | ----------- |
+| request(method, url, body, params)  | Generic method for making arbitrary HTTP requests. |
+| get(url, body, params)  | Makes GET request |
+| post(url, body, params)  | Makes POST request |
+| put(url, body, params)  | Makes PUT request |
+| patch(url, body, params)  | Makes PATCH request |
+| delete(url, body, params)  | Makes DELETE request |
+| batch(requests)  | Batch multiple HTTP requests together, to issue them in parallel. |
+| setBaseUrl(url)  | Sets the base URL for the session |
+| addHeader(key, value)  | Adds a header to the session |
+| addHeaders(object)  | Adds multiple headers to the session |
+| clearHeader(name)  | Removes header from the session |
+| addTag(key, value)  | Adds a tag to the session |
+| addTags(object)  | Adds multiple tags to the session |
+| clearTag(name)  | Removes tag from the session |
+
+```javascript
+import { fail } from 'k6';
+import { Httpx } from 'https://jslib.k6.io/httpx/0.0.3/index.js';
+import { randomIntBetween } from 'https://jslib.k6.io/k6-utils/1.2.0/index.js';
+
+const USERNAME = `user${randomIntBetween(1, 100000)}@example.com`; // random email address
+const PASSWORD = 'superCroc2021';
+
+const session = new Httpx({
+  baseURL: 'https://test-api.k6.io',
+  headers: {
+    'User-Agent': 'My custom user agent',
+    'Content-Type': 'application/x-www-form-urlencoded',
+  },
+  timeout: 20000, // 20s timeout.
+});
+
+export default function testSuite() {
+  const registrationResp = session.post(`/user/register/`, {
+    first_name: 'Crocodile',
+    last_name: 'Owner',
+    username: USERNAME,
+    password: PASSWORD,
+  });
+
+  if (registrationResp.status !== 201) {
+    fail('registration failed');
+  }
+
+  const loginResp = session.post(`/auth/token/login/`, {
+    username: USERNAME,
+    password: PASSWORD,
+  });
+
+  if (loginResp.status !== 200) {
+    fail('Authentication failed');
+  }
+
+  const authToken = loginResp.json('access');
+
+  // set the authorization header on the session for the subsequent requests.
+  session.addHeader('Authorization', `Bearer ${authToken}`);
+
+  const payload = {
+    name: `Croc Name`,
+    sex: 'M',
+    date_of_birth: '2019-01-01',
+  };
+
+  // this request uses the Authorization header set above.
+  const respCreateCrocodile = session.post(`/my/crocodiles/`, payload);
+
+  if (respCreateCrocodile.status !== 201) {
+    fail('Crocodile creation failed');
+  } else {
+    console.log('New crocodile created');
+  }
+}
+```
+
+> *k6chaijs*  
+
+Chai Assertion Library is an assertion library that is paired with k6 to provide a more developer-friendly BDD and TDD assertion style. It's a more powerful alternative to the k6-native check() and group().  
+
+This library is recommended for any type of testing, but especially for:
+
+ - Functional testing, where many asserts are needed.
+ - Stress testing, where the System Under Test is failing and the test code needs to stay robust.
+ - Load testing, when the test should abort as soon as the first failure occurs.
+ - Unit testing of JavaScript code, which is not necessarily connected with load.
+ - JavaScript Developers, who are already familiar with Chai, Jest or Jasmine.
+
+```javascript
+import { describe, expect } from 'https://jslib.k6.io/k6chaijs/4.3.4.1/index.js';
+import http from 'k6/http';
+
+export const options = {
+  thresholds: {
+    checks: [{ threshold: 'rate == 1.00' }], // fail test on any expect() failure
+  },
+};
+
+export default function testSuite() {
+  describe('Basic API test', () => {
+    const response = http.get('https://test-api.k6.io/public/crocodiles');
+    expect(response.status, 'API status code').to.equal(200);
+  });
+}
+```
+
+```javascript
+import http from 'k6/http';
+import { describe, expect } from 'https://jslib.k6.io/k6chaijs/4.3.4.1/index.js';
+
+export const options = {
+  thresholds: {
+    checks: [{ threshold: 'rate == 1.00' }], // fail test on any expect() failure
+  },
+};
+
+export default function testSuite() {
+  describe('Fetch a list of public crocodiles', () => {
+    const response = http.get('https://test-api.k6.io/public/crocodiles');
+
+    expect(response.status, 'response status').to.equal(200);
+    expect(response).to.have.validJsonBody();
+    expect(response.json().length, 'number of crocs').to.be.above(4);
+  });
+}
+```
+
+[more info](https://www.chaijs.com/api/bdd/)  
+
+## Protocols
+Out of the box, k6 supports the following protocols:
+
+ - HTTP/1.1
+ - HTTP/2
+ - WebSockets
+ - GRPC
+
+xk6 is a separate CLI tool that lets you build custom k6 binaries. Community contributors have already added support for additional protocols, with extensions for SQL, Kafka, ZeroMQ, Redis
+
+## Scenarios
+Scenarios make in-depth configurations to how VUs and iterations are scheduled. This makes it possible to model diverse traffic patterns in load tests.  
+
+```javascript
+export const options = {
+  scenarios: {
+    example_scenario: {
+      // name of the executor to use
+      executor: 'shared-iterations',
+
+      // common scenario configuration
+      startTime: '10s',
+      gracefulStop: '5s',
+      env: { EXAMPLEVAR: 'testing' },
+      tags: { example_tag: 'testing' },
+
+      // executor-specific configuration
+      vus: 10,
+      iterations: 200,
+      maxDuration: '10s',
+    },
+    another_scenario: {
+      /*...*/
+    },
+  },
+};
+```
+
+> Executors:
+
+| Name                                                                         | Value                   | Description                                                                                                                                        |
+| ---------------------------------------------------------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shared iterations         | `shared-iterations`     | A fixed amount of iterations are<br/> "shared" between a number of VUs.                                                                            |
+| Per VU iterations         | `per-vu-iterations`     | Each VU executes an exact number of iterations.                                                                                                    |
+| Constant VUs                   | `constant-vus`          | A fixed number of VUs execute as many<br/> iterations as possible for a specified amount of time.                                                  |
+| Ramping VUs                     | `ramping-vus`           | A variable number of VUs execute as many<br/> iterations as possible for a specified amount of time.                                               |
+| Constant Arrival Rate | `constant-arrival-rate` | A fixed number of iterations are executed<br/> in a specified period of time.                                                                      |
+| Ramping Arrival Rate   | `ramping-arrival-rate`  | A variable number of iterations are <br/> executed in a specified period of time.                                                                  |
+| Externally Controlled. |
