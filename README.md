@@ -409,3 +409,85 @@ export default function () {
   http.get("https://test-api.k6.io/public/crocodiles/1/");
 }
 ```
+
+## Environment Variables
+
+With the --env flag, you can use the CLI to define k6 variables. Then, you can use the variable to dynamically define an option's value in the script file.  
+
+his flag just provides variables to the script, which the script can use or ignore. For example, -e K6_ITERATIONS=120 does not configure the script iterations.  
+
+> k6 run script.js --env MY_USER_AGENT="hello"
+
+```javascript
+import http from "k6/http";
+
+export const options = {
+  userAgent: __ENV.MY_USER_AGENT,
+};
+
+export default function () {
+  http.get("http://test.k6.io/");
+}
+```
+
+## Options
+Options define test-run behavior. Most options can be passed in multiple places  
+| Option                                                    | Description                                                                         |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Address                                      | Address of the REST API server                                                           |
+| Batch                                          | Max number of simultaneous connections of a `http.batch()` call                     |
+| Batch per host                       | Max number of simultaneous connections of a `http.batch()` call for a host          |
+| Blacklist IP                          | Blacklist IP ranges from being called                                               |
+| Block hostnames                      | Block any requests to specific hostnames                                                   |
+| Compatibility mode                | Support running scripts with different ECMAScript modes                             |
+| Config                                        | Specify the config file in JSON format to read the options values                   |
+| Console output                       | Redirects logs logged by `console` methods to the provided output file              |
+| Discard response bodies       | Specify whether response bodies should be discarded                                      |
+| DNS                                               | Configure DNS resolution behavior                                                   |
+| Duration                                     | A string specifying the total duration of the test run; together with the vus option, it's a shortcut for a single scenario with a constant VUs executor |
+| Execution segment                   | Limit execution to a segment of the total test                                      |
+| Exit on running                       | Exits when test reaches the running status                                          |
+| Extension options                   | An object used to set configuration options for third-party collectors              |
+| Hosts                                           | An object with overrides to DNS resolution                                          |
+| HTTP debug                                 | Log all HTTP requests and responses                                                 |
+| Include system Env vars       | Pass the real system environment variables to the runtime                           |
+| Insecure skip TLS verify     | A boolean specifying whether should ignore TLS verifications for VU connections     |
+| Iterations                                 | A number specifying a fixed number of iterations to execute of the script; together with the vus option, it's a shortcut for a single scenario with a shared iterations executor |
+| Linger                                         | A boolean specifying whether k6 should linger around after test run completion      |
+| Local IPs                                   | A list of local IPs, IP ranges, and CIDRs from which VUs will make requests                 |
+| Log output                                 | Configuration about where logs from k6 should be send                               |
+| LogFormat                                   | Specify the format of the log output                                                |
+| Max redirects                           | The maximum number of HTTP redirects that k6 will follow                            |
+| Minimum iteration duration | Specify the minimum duration for every single execution                             |
+| No color                                     | A boolean specifying whether colored output is disabled                             |
+| No connection reuse               | A boolean specifying whether k6 should disable keep-alive connections               |
+| No cookies reset                     | This disables resetting the cookie jar after each VU iteration                      |
+| No summary                                 | disables the end-of-test summary                                                       |
+| No setup                                     | A boolean specifying whether `setup()` function should be run                       |
+| No teardown` function should be run                    |
+| No thresholds                           | Disables threshold execution                                                        |
+| No usage report                       | A boolean specifying whether k6 should send a usage report                          |
+| No VU connection reuse         | A boolean specifying whether k6 should reuse TCP connections                        |
+| Paused                                         | A boolean specifying whether the test should start in a paused state                |
+| Quiet                                           | A boolean specifying whether to show the progress update in the console or not      |
+| Results output                         | Specify the results output                                                          |
+| RPS |
+| Scenarios                                   | Define advanced execution scenarios                                                 |
+| Setup timeout` function is allow to run before it's terminated      |
+| Show logs                                   | A boolean specifying whether the cloud logs are printed out to the terminal         |
+| Stages |
+| Supply environment variable | Add/override environment variable with `VAR=value`                                    |
+| System tags                               | Specify which System Tags will be in the collected metrics                          |
+| Summary export |
+| Summary trend stats                                                     |
+| Summary time unit                                                      |
+| Tags                                             | Specify tags that should be set test-wide across all metrics                        |
+| Teardown timeout function is allowed to run before it's terminated   |
+| Thresholds                                 | Configure under what conditions a test is successful or not                         |
+| Throw                                           | A boolean specifying whether to throw errors on failed HTTP requests                |
+| TLS auth                                     | A list of TLS client certificate configuration objects                              |
+| TLS cipher suites                   | A list of cipher suites allowed to be used by in SSL/TLS interactions with a server |
+| TLS version                               | String or object representing the only SSL/TLS version allowed                      |
+| User agent                                 | A string specifying the User-Agent header when sending HTTP requests                |
+| Verbose                                       | A boolean specifying whether verbose logging is enabled                             |
+| VUs                                               | A number specifying the number of VUs to run concurrently                           |
